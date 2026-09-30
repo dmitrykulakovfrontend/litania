@@ -136,7 +136,7 @@ const EC = window.EC = {};
 /* Where the app lives, and where its small server lives. The server is optional: with EC.API empty the app works
    fully offline, sends nothing, and says so. EC.SYNC = "always" lets a test talk to a stubbed server from any address. */
 EC.SITE = "https://dmitrykulakovfrontend.github.io/litania";
-EC.API = "";
+EC.API = "https://d5dreb89c09p5akgjh13.764nr5vy.apigw.yandexcloud.net";   // Yandex Cloud: API Gateway litania-api -> function litania-api -> bucket litania-data-c1e7d856
 EC.SYNC = true;
 const onSite = () => location.href.indexOf(EC.SITE + "/") === 0;
 EC.online = () => !!EC.API && (EC.SYNC === "always" || (EC.SYNC && onSite()));

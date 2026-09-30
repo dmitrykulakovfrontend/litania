@@ -32,7 +32,7 @@ await page.goto(base + "?teacher"); await page.waitForTimeout(600);
 check("?teacher opens the teacher side", await page.evaluate(() => !EC.HIM && document.body.dataset.role === "teacher"));
 const link = await page.evaluate(() => EC.hisLink());
 check("his link points at this address", /#him\d+-/.test(link) && link.indexOf(base) === 0, link);
-check("no sync promise without a server", await page.evaluate(() => { EC.S.changedAt = Date.now(); return EC.syncState().show === false; }));
+if (!/github.io/.test(base)) check("no sync promise off the site", await page.evaluate(() => { EC.S.changedAt = Date.now(); return EC.syncState().show === false; }));
 check("console clean", !errs.filter(e => !/net::ERR_INTERNET_DISCONNECTED/.test(e)).length, errs.join(" | ").slice(0, 300));
 await browser.close();
 console.log(bad ? bad + " failed" : "offline checks pass");
