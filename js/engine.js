@@ -727,7 +727,9 @@ V.play = k => new Promise(done => {
   get(k).then(b => {
     if(!b){ V.st.msg = EC.HIM ? "Записи пока нет." : "No recording yet."; changed(); return done(false); }
     const url = URL.createObjectURL(b); AU = new Audio(url); V.st.playing = k;
-    if(meter()){ try{ ACX.resume(); const src = ACX.createMediaElementSource(AU); src.connect(AN); AN.connect(ACX.destination); }catch(e){} }
+    if(meter()){ try{ ACX.resume(); const src = ACX.createMediaElementSource(AU); src.connect(ACX.destination); src.connect(AN); }catch(e){} }
+    /* the analyser only listens. It must never reach the speakers: the microphone feeds it too, and a mic routed to the
+       speakers makes the browser echo canceller erase the voice from every recording after the first playback */
     AU.onended = AU.onerror = () => { URL.revokeObjectURL(url); V.st.playing = ""; AU = null; changed(); done(true); };
     AU.play().catch(() => { V.st.playing = ""; changed(); done(false); }); changed();
   });
