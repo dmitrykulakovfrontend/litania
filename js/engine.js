@@ -595,6 +595,9 @@ EC.cadence = () => { const since = Date.now() - 7 * DAY, s = EC.S.sessLog;
   return {last7: s.filter(x => x.d >= since).length, target: 3, last: s.length ? s[s.length-1].d : 0}; };
 
 /* ============ his progress: collected offline, sent on its own ============ */
+/* every call to the server gives up after 20 s: a hung connection must not leave "sending…" on screen forever */
+function tfetch(url, opt){ const c = window.AbortController ? new AbortController() : null, t = c && setTimeout(() => c.abort(), 20000);
+  return fetch(url, Object.assign({}, opt, c ? {signal: c.signal} : {})).finally(() => clearTimeout(t)); }
 function apiUrl(){ return EC.API + "/progress"; }
 function touch(){ EC.S.changedAt = Date.now(); EC.save(); sync(); }
 function summary(){
@@ -610,7 +613,7 @@ function sync(){
   if(!EC.online() || !EC.HIM || EC.PREVIEW || EC.DEMO || SYNCING || !EC.S.changedAt || EC.S.sentAt >= EC.S.changedAt) return;
   if(navigator.onLine === false) return;
   const snap = EC.snapshot(); SYNCING = true;
-  fetch(apiUrl(), {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(snap), keepalive: true})
+  tfetch(apiUrl(), {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(snap), keepalive: true})
     .then(r => { if(r.ok){ EC.S.sentAt = snap.at; EC.save(); changed(); } return r.ok; })
     .catch(() => false).then(ok => { SYNCING = false; if(ok && EC.S.changedAt > EC.S.sentAt) setTimeout(sync, 800); });
 }
@@ -628,7 +631,7 @@ EC.pullRep = () => {
   if(EC.DEMO){ changed(); return Promise.resolve(EC.S.rep); }
   if(!EC.API){ EC.voice.st.msg = "The progress server is not connected yet. His reports will appear here once it is."; changed(); return Promise.resolve(null); }
   REPLOAD = true; changed();
-  return fetch(apiUrl(), {cache: "no-store", headers: {"x-teacher-key": EC.S.tkey || ""}}).then(r => r.ok ? r.json() : Promise.reject(r.status))
+  return tfetch(apiUrl(), {cache: "no-store", headers: {"x-teacher-key": EC.S.tkey || ""}}).then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(d => { EC.S.rep = d; EC.S.repAt = Date.now(); REPLOAD = false; EC.save(); changed(); return d; })
     .catch(e => { REPLOAD = false; EC.voice.st.msg = e === 401 ? "The server did not accept the teacher key. Check it in Settings." : "Could not reach the progress store. Check the connection and press Refresh again."; changed(); return null; });
 };
@@ -789,7 +792,7 @@ const pend = () => Object.keys(CLIP).filter(k => k.indexOf("t:") === 0 && CLIP[k
 function upOne(k){
   const at = EC.S.vloc[k] || 1;
   return get(k).then(b => { if(!b) return;
-    return fetch(vapi() + "?k=" + encodeURIComponent(k), {method: "POST", headers: {"x-teacher-key": EC.S.tkey, "content-type": (b.type || "audio/webm").split(";")[0]}, body: b})
+    return tfetch(vapi() + "?k=" + encodeURIComponent(k), {method: "POST", headers: {"x-teacher-key": EC.S.tkey, "content-type": (b.type || "audio/webm").split(";")[0]}, body: b})
       .then(r => { if(r.status === 401){ vsync.err = "key"; throw 0; } if(r.status === 503){ vsync.err = "server"; throw 0; } if(!r.ok){ vsync.err = "net"; throw 0; } vsync.err = ""; EC.S.vup[k] = at; EC.save(); }); });
 }
 function upAll(){
@@ -802,10 +805,10 @@ function upAll(){
 function downAll(){
   if(!EC.HIM || !vOn() || vsync.busy) return Promise.resolve();
   vsync.busy = true; changed();
-  return fetch(vapi(), {cache: "no-store"}).then(r => r.ok ? r.json() : Promise.reject()).then(d => {
+  return tfetch(vapi(), {cache: "no-store"}).then(r => r.ok ? r.json() : Promise.reject()).then(d => {
     const clips = d.clips || {}, keys = Object.keys(clips); vsync.total = keys.length; vsync.err = "";
     const need = keys.filter(k => !CLIP[k] || (EC.S.vdown[k] || 0) < clips[k].at);
-    return need.reduce((p, k) => p.then(() => fetch(vapi() + "?k=" + encodeURIComponent(k) + "&x=" + clips[k].x, {cache: "no-store"})
+    return need.reduce((p, k) => p.then(() => tfetch(vapi() + "?k=" + encodeURIComponent(k) + "&x=" + clips[k].x, {cache: "no-store"})
       .then(r => r.ok ? r.blob() : Promise.reject()).then(b => put(k, new Blob([b], {type: VT[clips[k].x] || "audio/webm"}))).then(() => { EC.S.vdown[k] = clips[k].at; EC.save(); changed(); }).catch(() => {})), Promise.resolve());
   }).catch(() => { vsync.err = "net"; }).then(() => { vsync.busy = false; changed(); });
 }
