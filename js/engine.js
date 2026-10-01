@@ -717,7 +717,8 @@ function meter(){
   try{ ACX = new (window.AudioContext || window.webkitAudioContext)(); AN = ACX.createAnalyser(); AN.fftSize = 512; BUF = new Float32Array(AN.fftSize); }catch(e){ ACX = null; }
   return ACX;
 }
-V.level = () => { if(V.st.playing && (V.st.playing === "robot" || CLIP[V.st.playing] === 2)) return .3 + .4 * Math.abs(Math.sin(performance.now() / 110));
+V.level = () => { if(V.st.rec && V.st.rec.lvl) return V.st.rec.lvl();
+  if(V.st.playing && (V.st.playing === "robot" || CLIP[V.st.playing] === 2)) return .3 + .4 * Math.abs(Math.sin(performance.now() / 110));
   if(!AN || !(V.st.rec || (V.st.playing && V.st.playing !== "robot"))) return 0;
   AN.getFloatTimeDomainData(BUF); let s = 0; for(let i = 0; i < BUF.length; i++) s += BUF[i] * BUF[i];
   return Math.min(1, Math.sqrt(s / BUF.length) * 4); };
@@ -756,18 +757,21 @@ V.rec = k => {
   if(V.st.rec) return V.stop();
   if(!navigator.mediaDevices || !window.MediaRecorder){ V.st.msg = EC.HIM ? "Этот браузер не умеет записывать звук. Открой страницу в Chrome." : "This browser can't record. Open the page in Chrome."; changed(); return; }
   V.st.wait = k; V.st.msg = ""; changed();
-  navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
-    V.st.wait = "";
-    let mr; try{ mr = new MediaRecorder(stream, {audioBitsPerSecond: 32000}); }catch(e){ mr = new MediaRecorder(stream); }   // speech, not music: ~4× smaller packs
+  /* the clean chain (js/mic.js: RNNoise, soft gate, compressor) when it can be built, else the browser's own processing */
+  const plain = () => navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: true}}).then(stream => ({stream, level: null, close: () => stream.getTracks().forEach(t => t.stop())}));
+  const mic = window.VOXMIC && VOXMIC.enabled() ? VOXMIC.open().catch(e => { if(e && e.name === "NotAllowedError") throw e; return plain(); }) : plain();
+  mic.then(m => {
+    const stream = m.stream; V.st.wait = "";
+    let mr; try{ mr = new MediaRecorder(stream, {audioBitsPerSecond: m.level ? 64000 : 48000}); }catch(e){ mr = new MediaRecorder(stream); }   // speech: 64 kbit/s Opus is clear and a 6 s clip stays under 50 KB
     let src = null;
-    if(meter()){ try{ ACX.resume(); src = ACX.createMediaStreamSource(stream); src.connect(AN); }catch(e){} }
+    if(!m.level && meter()){ try{ ACX.resume(); src = ACX.createMediaStreamSource(stream); src.connect(AN); }catch(e){} }
     const ch = [];
     mr.ondataavailable = e => { if(e.data && e.data.size) ch.push(e.data); };
-    mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); if(src) try{ src.disconnect(); }catch(e){}
+    mr.onstop = () => { m.close(); if(src) try{ src.disconnect(); }catch(e){}
       if(V.st.rec && V.st.rec.iv) clearInterval(V.st.rec.iv);
       const b = new Blob(ch, {type: (ch[0] && ch[0].type) || "audio/webm"});
       V.st.rec = null; put(k, b).then(() => { if(k.indexOf("m:") === 0) touch(); else { EC.S.vloc[k] = Date.now(); EC.save(); upAll(); } changed(); }); };
-    V.st.rec = {k, mr, left: V.max, max: V.max, iv: setInterval(() => { if(!V.st.rec) return;
+    V.st.rec = {k, mr, lvl: m.level, left: V.max, max: V.max, iv: setInterval(() => { if(!V.st.rec) return;
       V.st.rec.left--; if(V.st.rec.left <= 0) V.stop(); else { EC.emit("rec", V.st.rec.left); changed(); } }, 1000)};
     mr.start(); changed();
   }).catch(() => { V.st.wait = ""; V.st.msg = EC.HIM ? "Микрофон не разрешён. Нажми на замок рядом с адресом и включи микрофон." : "Microphone blocked. Allow it in the padlock menu next to the address."; changed(); });

@@ -421,6 +421,7 @@ function settings() {
   return `<div class="tpage narrow"><h1 class="eng pagetitle">Settings</h1>
     ${pl("", `${h2("His name")}<div class="addnote"><input id="name" type="text" value="${E(S.name)}" placeholder="e.g. Dima" aria-label="His name"><button class="btn" data-act="setName">Save</button></div>`)}
     ${pl("", `${h2("Voice sending")}<p class="muted small">Your recordings reach his phone by themselves. The teacher key lets this device send them. Whoever set up the site has it.</p><div class="addnote"><input id="tkey" class="secret" type="text" autocomplete="off" spellcheck="false" value="${E(S.tkey)}" placeholder="Teacher key" aria-label="Teacher key"><button class="btn" data-act="setKey">Save</button></div><p class="voxline ${EC.voice.sinfo().err ? "wait" : "ok"}"><span class="lampi"></span>${E(EC.voice.sline())}</p>`)}
+    ${pl("", `${h2("Recording")}<p class="muted small">Noise removal cleans every recording on this device: hum below 80 Hz, background noise (RNNoise), quiet pauses between words, an even level. The browser's own processing stays off because it muffles speech. Turn it off only if your voice sounds better raw.</p><div class="seg two" role="radiogroup" aria-label="Noise removal">${[[1, "On"], [0, "Off"]].map(([v, t]) => `<button role="radio" aria-checked="${(window.VOXMIC ? VOXMIC.enabled() : true) === !!v}" data-act="micClean" data-arg="${v}">${t}</button>`).join("")}</div>`)}
     ${pl("", `${h2("Milestones")}<div class="medals">${MILESTONES.map(m => `<span class="${S.seen.includes(m) ? "got" : ""}">${A.medal(m, 44)}</span>`).join("")}</div>`)}
     ${pl("", `${h2("His link and the sandbox")}<p>His link carries the week and your seals. The sandbox on His view runs on a separate storage key, so practising in it never overwrites his real report.</p>`)}
     ${pl("", `${h2("Art")}${artNote(true)}`)}
@@ -531,6 +532,7 @@ window.DESIGN = {
     tick: pid => { if (EC.tick(pid)) { X.stampPid = pid; SFX.play("stamp"); EC.haptic(18); } else SFX.play("unstamp"); },
     coldOk: pid => { if (!EC.got(pid)) { EC.tick(pid); SFX.play("stamp"); } X.coldI++; X.coldShown = false; X.render(); },
     ex: id => { const was = EC.exOn(id); EC.exDone(id); if (!was) { X.stampPid = id; SFX.play("stamp"); EC.haptic(18); } else SFX.play("unstamp"); },
+    micClean: v => { if (window.VOXMIC) VOXMIC.set(!!+v); X.render(); },
     snd: () => { SFX.set(!SFX.on()); X.render(); },
     slot: pid => { X.slot = X.slot === pid ? null : pid; if (X.slot) { X.np = pid; EC.voice.hear(pid); } else SFX.play("tab"); X.render(); },
     world: i => { SFX.play("tab"); X.world = +i; X.slot = null; X.render(); },

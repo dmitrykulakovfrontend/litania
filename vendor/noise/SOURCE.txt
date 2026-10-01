@@ -1,0 +1,1 @@
+@sapphi-red/web-noise-suppressor 0.4.1 (MIT), only the RNNoise parts are used. https://github.com/sapphi-red/web-noise-suppressor

@@ -775,3 +775,4 @@ body.cer-lock{overflow:hidden}
 .vx-cards .acts{margin-top:30px}
 @media (prefers-reduced-motion:no-preference){.hero .wkcog{animation:vx-spin 90s linear infinite}}
 .fl i b{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
+.seg.two{grid-template-columns:repeat(2,minmax(0,160px))}
