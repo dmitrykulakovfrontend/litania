@@ -776,3 +776,4 @@ body.cer-lock{overflow:hidden}
 @media (prefers-reduced-motion:no-preference){.hero .wkcog{animation:vx-spin 90s linear infinite}}
 .fl i b{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
 .seg.two{grid-template-columns:repeat(2,minmax(0,160px))}
+.diag{margin-top:12px;font-size:13px;line-height:1.5}.diag p{margin:0 0 4px;position:relative;z-index:1}.diag b{color:var(--phos);margin-right:8px}
