@@ -44,6 +44,19 @@ M.chain = async (c, input) => {
 };
 
 const RAW = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 1 } } };
+/* the microphone picked in Settings, by deviceId; empty means the system default. Firefox on Windows takes the default
+   *communications* device, which can be a Bluetooth headset in call mode (8-16 kHz, awful) while Chrome takes another mic */
+const DEV = "vx-mic-id";
+M.device = () => { try { return localStorage.getItem(DEV) || ""; } catch (e) { return ""; } };
+M.setDevice = id => { try { if (id) localStorage.setItem(DEV, id); else localStorage.removeItem(DEV); } catch (e) {} };
+M.constraints = agc => { const a = Object.assign({}, RAW.audio, agc ? { autoGainControl: true } : {}), id = M.device(); if (id) a.deviceId = { exact: id }; return { audio: a }; };
+/* a remembered microphone that is gone (unplugged, renamed) falls back to the default instead of failing */
+M.getMic = async agc => {
+  try { return await navigator.mediaDevices.getUserMedia(M.constraints(agc)); }
+  catch (e) { if (M.device() && (e.name === "OverconstrainedError" || e.name === "NotFoundError")) { M.setDevice(""); return navigator.mediaDevices.getUserMedia(M.constraints(agc)); } throw e; }
+};
+M.list = () => navigator.mediaDevices && navigator.mediaDevices.enumerateDevices ? navigator.mediaDevices.enumerateDevices().then(ds => ds.filter(d => d.kind === "audioinput" && d.deviceId !== "default" && d.deviceId !== "communications")) : Promise.resolve([]);
+M.callMode = label => /hands-?free|головной телефон/i.test(label || "");
 /* resume() can wait forever where the browser blocks audio, so it gets a deadline */
 const start = c => c.state === "running" ? Promise.resolve() : Promise.race([c.resume(), new Promise((_, no) => setTimeout(() => no(Object.assign(new Error("the audio context did not start"), { name: "AudioBlocked" })), 2000))]);
 /* 48 kHz is what RNNoise is trained on. A browser that cannot feed a microphone at another rate into it
@@ -63,7 +76,7 @@ M.open = async () => {
   const early = ctx.resume().catch(() => {});      // start while the tap that asked for it still counts as a gesture
   try {
     await load(); await early;
-    const raw = await navigator.mediaDevices.getUserMedia(RAW);
+    const raw = await M.getMic(false);
     try {
       const { src, c } = await wire(raw), ch = await M.chain(c, src), dest = c.createMediaStreamDestination();
       dest.channelCount = 1; ch.out.connect(dest);
@@ -89,22 +102,28 @@ M.diagnose = async () => {
     c = new AudioContext({ sampleRate: 48000 }); const early = c.resume().catch(() => {});
     try { await load(); add("noise model", "loaded" + (wasm ? ", " + Math.round(wasm.byteLength / 1024) + " KB" : "")); } catch (e) { add("noise model", "FAILED " + e.name + ": " + e.message); }
     await early; add("audio context", c.sampleRate + " Hz, " + c.state);
-    raw = await navigator.mediaDevices.getUserMedia(RAW);
+    raw = await M.getMic(false);
     const t = raw.getAudioTracks()[0], s = t.getSettings();
-    add("microphone", t.label || "(no label)"); add("mic settings", JSON.stringify({ sampleRate: s.sampleRate, channelCount: s.channelCount, echoCancellation: s.echoCancellation, noiseSuppression: s.noiseSuppression, autoGainControl: s.autoGainControl }));
+    add("microphone", (t.label || "(no label)") + (M.callMode(t.label) ? "  <- a Bluetooth headset in call mode: phone quality. Pick another microphone above." : "")); add("mic settings", JSON.stringify({ sampleRate: s.sampleRate, channelCount: s.channelCount, echoCancellation: s.echoCancellation, noiseSuppression: s.noiseSuppression, autoGainControl: s.autoGainControl }));
     let src;
     try { src = c.createMediaStreamSource(raw); add("mic into 48 kHz", "ok"); }
     catch (e) { add("mic into 48 kHz", "FAILED " + e.name + ": " + e.message); c.close(); c = new AudioContext(); await start(c).catch(() => {}); src = c.createMediaStreamSource(raw); add("mic into " + c.sampleRate + " Hz", "ok"); }
-    const pre = new AnalyserNode(c, { fftSize: 2048 }); src.connect(pre);
+    const pre = new AnalyserNode(c, { fftSize: 2048 }), spec = new AnalyserNode(c, { fftSize: 4096, smoothingTimeConstant: 0 }); src.connect(pre); src.connect(spec);
+    const fb = new Float32Array(spec.frequencyBinCount), fmax = new Float32Array(spec.frequencyBinCount).fill(-200);
     let ch = null; try { ch = await M.chain(c, src); add("noise chain", "built"); } catch (e) { add("noise chain", "FAILED " + e.name + ": " + e.message); }
     add("now", "speak for 3 seconds…");
     const a = new Float32Array(pre.fftSize), b = new Float32Array(ch ? ch.tap.fftSize : 1); let pk0 = 0, pk1 = 0;
     for (let i = 0; i < 60; i++) {
       await new Promise(res => setTimeout(res, 50));
       pre.getFloatTimeDomainData(a); for (const x of a) { const v = Math.abs(x); if (v > pk0) pk0 = v; }
+      spec.getFloatFrequencyData(fb); for (let j = 0; j < fb.length; j++) if (fb[j] > fmax[j]) fmax[j] = fb[j];
       if (ch) { ch.tap.getFloatTimeDomainData(b); for (const x of b) { const v = Math.abs(x); if (v > pk1) pk1 = v; } }
     }
-    r.pop(); add("raw mic peak", db(pk0)); if (ch) add("after the chain, peak", db(pk1));
+    /* how high the sound reaches: the top bin within 45 dB of the loudest one. A call-mode headset stops near 4 or 8 kHz */
+    let top = -200; for (const v of fmax) if (v > top) top = v;
+    let hi = 0; for (let j = fmax.length - 1; j > 0; j--) if (fmax[j] > top - 45 && fmax[j] > -95) { hi = j * c.sampleRate / spec.fftSize; break; }
+    r.pop(); add("raw mic peak", db(pk0));
+    add("sound reaches", pk0 < 0.003 ? "(too quiet to tell)" : (hi / 1000).toFixed(1) + " kHz" + (hi < 8500 ? "  <- phone quality. A good microphone reaches 12-20 kHz: pick another one above." : ", full range")); if (ch) add("after the chain, peak", db(pk1));
     if (ch) ch.close();
   } catch (e) { add("FAILED", (e.name || "Error") + ": " + (e.message || e)); }
   finally { if (raw) raw.getTracks().forEach(t => t.stop()); if (c && c.state !== "closed") c.close(); }

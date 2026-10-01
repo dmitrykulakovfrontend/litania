@@ -761,7 +761,7 @@ V.rec = k => {
   if(!navigator.mediaDevices || !window.MediaRecorder){ V.st.msg = EC.HIM ? "Этот браузер не умеет записывать звук. Открой страницу в Chrome." : "This browser can't record. Open the page in Chrome."; changed(); return; }
   V.st.wait = k; V.st.msg = ""; changed();
   /* the clean chain (js/mic.js: RNNoise, soft gate, compressor) when it can be built, else the browser's own processing */
-  const plain = () => navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: true}}).then(stream => ({stream, level: null, close: () => stream.getTracks().forEach(t => t.stop())}));
+  const plain = () => (window.VOXMIC ? VOXMIC.getMic(true) : navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: true}})).then(stream => ({stream, level: null, close: () => stream.getTracks().forEach(t => t.stop())}));
   const mic = window.VOXMIC && VOXMIC.enabled() ? VOXMIC.open().catch(e => { if(e && e.name === "NotAllowedError") throw e; return plain(); }) : plain();
   mic.then(m => {
     const stream = m.stream; V.st.wait = "";

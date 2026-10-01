@@ -777,3 +777,4 @@ body.cer-lock{overflow:hidden}
 .fl i b{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
 .seg.two{grid-template-columns:repeat(2,minmax(0,160px))}
 .diag{margin-top:12px;font-size:13px;line-height:1.5}.diag p{margin:0 0 4px;position:relative;z-index:1}.diag b{color:var(--phos);margin-right:8px}
+.micpick{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:14px 0 4px}.micpick b{font-size:16px}.micpick select{flex:1 1 260px;min-width:0;min-height:44px;font:inherit;font-size:15.5px;color:var(--bone);background:#08101f;border:1px solid #2e4476;border-radius:3px;padding:0 10px}.micpick select:focus-visible{outline:2px solid var(--brass2);outline-offset:2px}

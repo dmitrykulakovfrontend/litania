@@ -416,12 +416,21 @@ function guide() {
     : b.t === "links" ? b.x.map(l => `<p><a href="${E(l.u)}" target="_blank" rel="noopener"><b>${E(l.n)}</b></a> ${E(l.d)}</p>`).join("")
     : b.t === "note" || b.t === "ru" ? `<div class="aside${b.t === "ru" ? " ru" : ""}">${b.x}</div>` : `<p>${b.x}</p>`).join("")}</section>`).join("")}</div>`;
 }
+/* which microphone records, on this device. Names appear once the browser has been allowed to use the microphone */
+function micPicker() {
+  if (!window.VOXMIC) return "";
+  if (X.mics == null && !X.micsLoading) { X.micsLoading = true; VOXMIC.list().then(l => { X.mics = l; X.micsLoading = false; X.render(); }).catch(() => { X.mics = []; X.micsLoading = false; }); }
+  const cur = VOXMIC.device(), list = X.mics || [], named = list.some(m => m.label);
+  return `<label class="micpick"><b>Microphone</b><select id="micsel" aria-label="Microphone"><option value=""${cur ? "" : " selected"}>System default</option>${list.map((m, i) => `<option value="${E(m.deviceId)}"${m.deviceId === cur ? " selected" : ""}>${E(m.label || "Microphone " + (i + 1))}${VOXMIC.callMode(m.label) ? " (call mode, phone quality)" : ""}</option>`).join("")}</select></label>
+    ${named ? "" : `<p class="muted small">Names show up after the browser is allowed to use the microphone: press Check microphone once.</p>`}`;
+}
 function settings() {
   const S = EC.S;
   return `<div class="tpage narrow"><h1 class="eng pagetitle">Settings</h1>
     ${pl("", `${h2("His name")}<div class="addnote"><input id="name" type="text" value="${E(S.name)}" placeholder="e.g. Dima" aria-label="His name"><button class="btn" data-act="setName">Save</button></div>`)}
     ${pl("", `${h2("Voice sending")}<p class="muted small">Your recordings reach his phone by themselves. The teacher key lets this device send them. Whoever set up the site has it.</p><div class="addnote"><input id="tkey" class="secret" type="text" autocomplete="off" spellcheck="false" value="${E(S.tkey)}" placeholder="Teacher key" aria-label="Teacher key"><button class="btn" data-act="setKey">Save</button></div><p class="voxline ${EC.voice.sinfo().err ? "wait" : "ok"}"><span class="lampi"></span>${E(EC.voice.sline())}</p>`)}
     ${pl("", `${h2("Recording")}<p class="muted small">Noise removal cleans every recording on this device: hum below 80 Hz, background noise (RNNoise), quiet pauses between words, an even level. The browser's own processing stays off because it muffles speech. Turn it off only if your voice sounds better raw.</p><div class="seg two" role="radiogroup" aria-label="Noise removal">${[[1, "On"], [0, "Off"]].map(([v, t]) => `<button role="radio" aria-checked="${(window.VOXMIC ? VOXMIC.enabled() : true) === !!v}" data-act="micClean" data-arg="${v}">${t}</button>`).join("")}</div>
+      ${micPicker()}
       <p class="muted small">If a recording sounds wrong in one browser, check the microphone there and send a screenshot of the result.</p><button class="btn" data-act="micCheck"${X.micBusy ? " disabled" : ""}>${X.micBusy ? "Checking: speak for 3 seconds…" : "Check microphone"}</button>${X.micDiag ? `<div class="glass code diag" aria-live="polite">${X.micDiag.map(([k, v]) => `<p><b>${E(k)}</b> ${E(v)}</p>`).join("")}</div>` : ""}`)}
     ${pl("", `${h2("Milestones")}<div class="medals">${MILESTONES.map(m => `<span class="${S.seen.includes(m) ? "got" : ""}">${A.medal(m, 44)}</span>`).join("")}</div>`)}
     ${pl("", `${h2("His link and the sandbox")}<p>His link carries the week and your seals. The sandbox on His view runs on a separate storage key, so practising in it never overwrites his real report.</p>`)}
@@ -513,6 +522,8 @@ window.DESIGN = {
     if (X.stampPid) { const s = document.querySelector(`.stamp.on[data-arg="${X.stampPid}"],.done-stamp.on[data-arg="${X.stampPid}"]`); if (s) { s.classList.add("hit"); setTimeout(() => s.classList.remove("hit"), 420);
       const r = s.getBoundingClientRect(); FX.burst(r.left + r.width / 2, r.top + 22, { cls: "wax", n: 10, r: 30 }); } X.stampPid = null; }
     FX.flaps(); FX.counts(); pump(); FX.motes(true, HIM ? 34 : 16);
+    const ms = document.getElementById("micsel");
+    if (ms && !ms._bound) { ms._bound = true; ms.addEventListener("change", () => { VOXMIC.setDevice(ms.value); X.micDiag = null; SFX.play("click"); X.render(); }); }
     if (X.cur === "cards") {
       const card = document.querySelector(".vx-cards .card");
       if (card) FX.swipe(card, { enabled: () => X.shown, dist: () => Math.min(130, innerWidth * .28), armed: () => EC.haptic(6), commit: d => window.DESIGN.acts.grade(d === "l" ? 1 : 3) });
@@ -534,7 +545,7 @@ window.DESIGN = {
     coldOk: pid => { if (!EC.got(pid)) { EC.tick(pid); SFX.play("stamp"); } X.coldI++; X.coldShown = false; X.render(); },
     ex: id => { const was = EC.exOn(id); EC.exDone(id); if (!was) { X.stampPid = id; SFX.play("stamp"); EC.haptic(18); } else SFX.play("unstamp"); },
     micCheck: () => { if (!window.VOXMIC || X.micBusy) return; X.micBusy = true; X.micDiag = null; X.render();
-      VOXMIC.diagnose().then(r => { X.micDiag = r; }).catch(e => { X.micDiag = [["FAILED", String(e)]]; }).then(() => { X.micBusy = false; X.render(); }); },
+      VOXMIC.diagnose().then(r => { X.micDiag = r; X.mics = null; }).catch(e => { X.micDiag = [["FAILED", String(e)]]; }).then(() => { X.micBusy = false; X.render(); }); },
     micClean: v => { if (window.VOXMIC) VOXMIC.set(!!+v); X.render(); },
     snd: () => { SFX.set(!SFX.on()); X.render(); },
     slot: pid => { X.slot = X.slot === pid ? null : pid; if (X.slot) { X.np = pid; EC.voice.hear(pid); } else SFX.play("tab"); X.render(); },
